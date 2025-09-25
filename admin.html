@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>TRC-20 Admin Panel</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{font-family:Arial,sans-serif;margin:0;padding:0;background:#f4f6f8;color:#333;}
+.navbar{background:#2e64e6;color:white;padding:15px;text-align:center;font-size:20px;font-weight:bold;}
+.container{max-width:720px;margin:20px auto;padding:0 15px;}
+.card{background:white;padding:15px;margin:15px 0;border-radius:10px;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+input,button{padding:8px;margin:6px 0;width:100%;border-radius:6px;}
+button{background:#1976D2;color:white;border:none;cursor:pointer;}
+button:hover{background:#1565C0;}
+.footer{text-align:center;color:#666;font-size:0.85em;margin:30px 0;}
+</style>
+</head>
+<body>
+<div class="navbar">MyTRC20 Company - Admin</div>
+<div class="container">
+<div class="card">
+<div class="muted">Enter user wallet, amount, and recipient. Click "Request Transfer".</div>
+<div>
+<label>User Address (T...)</label>
+<input id="userAddress" placeholder="T..." />
+</div>
+<div>
+<label>Amount (USDT)</label>
+<input id="amount" placeholder="10" />
+</div>
+<div>
+<label>Recipient (Your Wallet Address)</label>
+<input id="recipient" value="TSxAVEkdnS6KdxwPYBmx4sHrS5eC3mv7P9" />
+</div>
+<div>
+<button id="requestBtn">Request Transfer</button>
+</div>
+<div id="result"></div>
+</div>
+</div>
+<div class="footer">
+&copy; 2025 MyTRC20 Company. All rights reserved. | <a href="#">Privacy Policy</a>
+</div>
+
+<script>
+const BACKEND_BASE=window.location.origin;
+document.getElementById('requestBtn').addEventListener('click',async()=>{
+  const userAddress=document.getElementById('userAddress').value.trim();
+  const amount=document.getElementById('amount').value.trim();
+  const recipient=document.getElementById('recipient').value.trim();
+  if(!userAddress||!amount||!recipient)return alert('Fill all fields');
+  document.getElementById('result').innerText='Sending request...';
+  try{
+    const resp=await fetch(`${BACKEND_BASE}/admin/request`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({userAddress,amount:Number(amount),recipient})
+    });
+    const j=await resp.json();
+    if(j.ok){
+      document.getElementById('result').innerHTML='Request created: <strong>'+j.id+'</strong>';
+    }else{
+      document.getElementById('result').innerText='Error: '+JSON.stringify(j);
+    }
+  }catch(e){console.error(e);document.getElementById('result').innerText='Network error';}
+});
+</script>
+</body>
+</html>
